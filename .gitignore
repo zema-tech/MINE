@@ -1,0 +1,40 @@
+# Binaries
+/bin/
+/panel/backend/bin/
+/daemon/bin/
+mine
+mined
+
+# Go
+*.exe
+*.test
+*.out
+/vendor/
+
+# Node
+node_modules/
+panel/frontend/dist/
+panel/frontend/dist-ssr/
+*.local
+
+# Env
+.env
+.env.*
+!.env.example
+
+# DB data
+postgres-data/
+redis-data/
+minio-data/
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/

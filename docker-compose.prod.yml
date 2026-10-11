@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-mine}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+
+  panel:
+    image: ghcr.io/zema-tech/mine-panel:${MINE_VERSION:-latest}
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      MINE_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mine}?sslmode=disable
+      MINE_REDIS_ADDR: redis:6379
+      MINE_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MINE_JWT_SECRET: ${JWT_SECRET}
+      MINE_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      MINE_PORT: "8080"
+      MINE_APP_URL: ${APP_URL}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    image: ghcr.io/zema-tech/mine-frontend:${MINE_VERSION:-latest}
+    restart: always
+    depends_on:
+      - panel
+    ports:
+      - "80:80"
+
+  daemon:
+    image: ghcr.io/zema-tech/mine-daemon:${MINE_VERSION:-latest}
+    restart: always
+    environment:
+      MINED_PANEL_URL: wss://${APP_HOST}/api/daemon/ws
+      MINED_TOKEN_FILE: /run/secrets/daemon_token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - mined-data:/var/lib/mined
+    secrets:
+      - daemon_token
+
+secrets:
+  daemon_token:
+    file: ./daemon_token.txt
+
+volumes:
+  postgres-data:
+  redis-data:
+  mined-data:

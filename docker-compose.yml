@@ -1,0 +1,103 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mine}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mine_dev_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-mine}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mine}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-mine}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-mine_minio_secret_32chars__}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  panel:
+    build:
+      context: ./panel/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      MINE_DATABASE_URL: postgres://mine:mine_dev_secret@postgres:5432/mine?sslmode=disable
+      MINE_REDIS_ADDR: redis:6379
+      MINE_JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_me_32chars_min}
+      MINE_PORT: "8080"
+      MINE_APP_URL: http://localhost:8080
+      MINE_ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev_encryption_key_32bytes_xxxx}
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+    volumes:
+      - ./panel/backend/migrations:/migrations:ro
+
+  frontend:
+    build:
+      context: ./panel/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - panel
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+
+  daemon:
+    build:
+      context: ./daemon
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - panel
+    environment:
+      MINED_PANEL_URL: ws://panel:8080/api/daemon/ws
+      MINED_TOKEN: ${DAEMON_TOKEN:-dev_daemon_token}
+      MINED_DATA_DIR: /var/lib/mined
+      MINED_PORT: "8081"
+    ports:
+      - "${DAEMON_PORT:-8081}:8081"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - mined-data:/var/lib/mined
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  mined-data:
